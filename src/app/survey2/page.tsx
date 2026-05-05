@@ -12,12 +12,11 @@ export default function Survey2() {
   const [images, setImages] = useState<string[]>([]);
   const [question, setQuestion] = useState("");
   const [loading, setLoading] = useState(true);
-  const [finished, setFinished] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    async function loadData() {
-      console.log('Survey 2: Fetching images and stats...');
+  const loadData = async () => {
+    setLoading(true);
+    console.log('Survey 2: Fetching images and stats...');
       try {
         const [imagesRes, statsRes] = await Promise.all([
           fetch('/api/images').then(async r => {
@@ -87,28 +86,25 @@ export default function Survey2() {
         setError("Failed to load data. Make sure to complete Survey 1 first to generate stats.");
         setLoading(false);
       }
-    }
+  };
+
+  useEffect(() => {
     loadData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleSelect = async (chosenImage: string) => {
+    setLoading(true);
     await fetch('/api/survey2', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ question, chosenImage, displayedImages: images }),
     });
-    setFinished(true);
+    loadData();
   };
 
   if (loading) return <div>Loading...</div>;
   if (error) return <div className="card"><p style={{color: 'red'}}>{error}</p></div>;
-  if (finished) return (
-    <div className="card">
-      <h2>Thank you!</h2>
-      <p>Your preference has been recorded.</p>
-      <button onClick={() => window.location.href = '/'}>Return Home</button>
-    </div>
-  );
 
   return (
     <div className="card" style={{ maxWidth: '1000px' }}>

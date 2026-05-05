@@ -6,7 +6,6 @@ export default function Survey1() {
   const [images, setImages] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [finished, setFinished] = useState(false);
 
   useEffect(() => {
     console.log('Survey 1: Fetching images from /api/images...');
@@ -42,7 +41,8 @@ export default function Survey1() {
     
     // Optimistically move to next
     if (currentIndex + 1 >= images.length) {
-      setFinished(true);
+      setImages(prev => [...prev].sort(() => Math.random() - 0.5));
+      setCurrentIndex(0);
     } else {
       setCurrentIndex(currentIndex + 1);
     }
@@ -56,14 +56,8 @@ export default function Survey1() {
 
   if (loading) return <div>Loading images...</div>;
   
-  if (finished || images.length === 0) {
-    return (
-      <div className="card">
-        <h2>Thank you!</h2>
-        <p>You have rated all available images.</p>
-        <button onClick={() => window.location.href = '/'}>Return Home</button>
-      </div>
-    );
+  if (images.length === 0) {
+    return <div>No images found.</div>;
   }
 
   return (
