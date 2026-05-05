@@ -30,12 +30,15 @@ export default function Survey2() {
           }),
           fetch('/api/survey1').then(async r => {
             if (!r.ok) {
-              console.error('Survey 2: Error fetching /api/survey1', r.status);
-              throw new Error('Failed to fetch survey1 stats');
+              console.warn('Survey 2: Warning fetching /api/survey1', r.status);
+              return { stats: {} };
             }
             const data = await r.json();
             console.log('Survey 2: survey1 data:', data);
             return data;
+          }).catch(err => {
+            console.warn('Survey 2: Network error fetching /api/survey1', err);
+            return { stats: {} };
           })
         ]);
         
@@ -83,7 +86,7 @@ export default function Survey2() {
         setLoading(false);
       } catch (err) {
         console.error("Survey 2 Error:", err);
-        setError("Failed to load data. Make sure to complete Survey 1 first to generate stats.");
+        setError("Failed to load survey images. Please try again later.");
         setLoading(false);
       }
   };
