@@ -1,0 +1,53 @@
+[
+  {
+    "question": "Which robot would you prefer to serve you food?",
+    "chosenImage": "robot_4.svg",
+    "displayedImages": [
+      "robot_4.svg",
+      "robot_12.svg",
+      "robot_10.svg",
+      "robot_11.svg",
+      "robot_19.svg",
+      "robot_5.svg",
+      "robot_21.svg",
+      "robot_15.svg",
+      "robot_18.svg",
+      "robot_9.svg"
+    ],
+    "timestamp": 1777486665105
+  },
+  {
+    "question": "Which robot would you prefer to take care of a sick loved one?",
+    "chosenImage": "robot_21.svg",
+    "displayedImages": [
+      "robot_17.svg",
+      "robot_21.svg",
+      "robot_5.svg",
+      "robot_10.svg",
+      "robot_11.svg",
+      "robot_18.svg",
+      "robot_6.svg",
+      "robot_12.svg",
+      "robot_20.svg",
+      "robot_3.svg"
+    ],
+    "timestamp": 1777486672246
+  },
+  {
+    "question": "Which robot would you prefer to take care of a sick loved one?",
+    "chosenImage": "robot_4.svg",
+    "displayedImages": [
+      "robot_1.svg",
+      "robot_11.svg",
+      "robot_18.svg",
+      "robot_12.svg",
+      "robot_9.svg",
+      "robot_4.svg",
+      "robot_3.svg",
+      "robot_15.svg",
+      "robot_16.svg",
+      "robot_7.svg"
+    ],
+    "timestamp": 1777491781651
+  }
+]
