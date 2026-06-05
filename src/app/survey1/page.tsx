@@ -1,10 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function Survey1() {
+  const router = useRouter();
   const [images, setImages] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [answeredCount, setAnsweredCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -39,19 +42,27 @@ export default function Survey1() {
   const handleRating = async (rating: number) => {
     const image = images[currentIndex];
     
-    // Optimistically move to next
-    if (currentIndex + 1 >= images.length) {
-      setImages(prev => [...prev].sort(() => Math.random() - 0.5));
-      setCurrentIndex(0);
-    } else {
-      setCurrentIndex(currentIndex + 1);
-    }
-
+    // Save rating POST request
     await fetch('/api/survey1', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ image, rating }),
     });
+
+    const nextCount = answeredCount + 1;
+    setAnsweredCount(nextCount);
+
+    if (nextCount >= 5) {
+      router.push('/survey2');
+    } else {
+      // Move to next image
+      if (currentIndex + 1 >= images.length) {
+        setImages(prev => [...prev].sort(() => Math.random() - 0.5));
+        setCurrentIndex(0);
+      } else {
+        setCurrentIndex(currentIndex + 1);
+      }
+    }
   };
 
   if (loading) return <div>Loading images...</div>;
@@ -62,6 +73,11 @@ export default function Survey1() {
 
   return (
     <div className="card">
+      <div style={{ float: 'right', fontSize: '0.85rem', color: '#71717a', fontWeight: 'bold' }}>
+        Question {answeredCount + 1} of 5
+      </div>
+      <div style={{ clear: 'both' }} />
+      
       <h2>How realistically human does this robot look?</h2>
       <p style={{ color: 'var(--border)' }}>1 = Not human at all | 4 = Cartoonish/Animatronic | 7 = Barely tell it's a robot</p>
       
@@ -82,3 +98,4 @@ export default function Survey1() {
     </div>
   );
 }
+

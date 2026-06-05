@@ -8,25 +8,52 @@ export async function GET() {
     const rawData = await fs.readFile(dataPath, 'utf-8');
     const data = JSON.parse(rawData);
     return NextResponse.json({ data });
-  } catch (error) {
+  } catch (error: any) {
+    if (error.code === 'ENOENT') {
+      return NextResponse.json({ data: [] });
+    }
     return NextResponse.json({ error: 'Failed to read data' }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
-  const { question, chosenImage, displayedImages } = await request.json();
-  const dataPath = path.join(process.cwd(), 'data', 'survey2.json');
+  const body = await request.json();
+  const dataDir = path.join(process.cwd(), 'data');
+  const dataPath = path.join(dataDir, 'survey2.json');
   
   try {
-    const rawData = await fs.readFile(dataPath, 'utf-8');
-    const data = JSON.parse(rawData);
+    await fs.mkdir(dataDir, { recursive: true });
+    let data = [];
+    try {
+      const rawData = await fs.readFile(dataPath, 'utf-8');
+      data = JSON.parse(rawData);
+    } catch (readError: any) {
+      if (readError.code !== 'ENOENT') {
+        throw readError;
+      }
+    }
     
-    data.push({ question, chosenImage, displayedImages, timestamp: Date.now() });
+    // Support both old and new formats
+    if (body.ranking) {
+      data.push({
+        question: body.question,
+        ranking: body.ranking,
+        timestamp: Date.now()
+      });
+    } else {
+      data.push({
+        question: body.question,
+        chosenImage: body.chosenImage,
+        displayedImages: body.displayedImages,
+        timestamp: Date.now()
+      });
+    }
     
     await fs.writeFile(dataPath, JSON.stringify(data, null, 2));
     
     return NextResponse.json({ success: true });
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to save data' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to save data', details: String(error) }, { status: 500 });
   }
 }
+

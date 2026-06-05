@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 
 const QUESTIONS = [
   "Which robot would you prefer to serve you food?",
@@ -9,135 +10,328 @@ const QUESTIONS = [
 ];
 
 export default function Survey2() {
-  const [images, setImages] = useState<string[]>([]);
-  const [question, setQuestion] = useState("");
+  const [unranked, setUnranked] = useState<string[]>([]);
+  const [slots, setSlots] = useState<(string | null)[]>([null, null, null, null, null]);
+  const [questionsList, setQuestionsList] = useState<string[]>([]);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [submitted, setSubmitted] = useState(false);
 
-  const loadData = async () => {
+  // Drag and Drop States
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [draggedSource, setDraggedSource] = useState<'unranked' | 'slots' | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+
+  const loadInitialData = async () => {
     setLoading(true);
-    console.log('Survey 2: Fetching images and stats...');
-      try {
-        const [imagesRes, statsRes] = await Promise.all([
-          fetch('/api/images').then(async r => {
-            if (!r.ok) {
-              console.error('Survey 2: Error fetching /api/images', r.status);
-              throw new Error('Failed to fetch images');
-            }
-            const data = await r.json();
-            console.log('Survey 2: images data:', data);
-            return data;
-          }),
-          fetch('/api/survey1').then(async r => {
-            if (!r.ok) {
-              console.warn('Survey 2: Warning fetching /api/survey1', r.status);
-              return { stats: {} };
-            }
-            const data = await r.json();
-            console.log('Survey 2: survey1 data:', data);
-            return data;
-          }).catch(err => {
-            console.warn('Survey 2: Network error fetching /api/survey1', err);
-            return { stats: {} };
-          })
-        ]);
-        
-        const allImages: string[] = imagesRes.images || [];
-        const stats: Record<string, { count: number; average: number }> = statsRes.stats || {};
-        
-        // Group images by rounded average 1-7
-        const pools: Record<number, string[]> = { 1:[], 2:[], 3:[], 4:[], 5:[], 6:[], 7:[] };
-        const unrated: string[] = [];
-
-        for (const img of allImages) {
-          if (stats[img] && stats[img].count > 0) {
-            const rounded = Math.round(stats[img].average);
-            const clamped = Math.max(1, Math.min(7, rounded));
-            pools[clamped].push(img);
-          } else {
-            unrated.push(img);
-          }
-        }
-
-        const selected: string[] = [];
-        
-        // Pick one from each pool 1-7 if available
-        for (let i = 1; i <= 7; i++) {
-          if (pools[i].length > 0) {
-            const randomImg = pools[i][Math.floor(Math.random() * pools[i].length)];
-            selected.push(randomImg);
-            pools[i] = pools[i].filter(img => img !== randomImg); // remove picked
-          }
-        }
-
-        // Fill remaining up to 10
-        const remainingPool = [...Object.values(pools).flat(), ...unrated];
-        while (selected.length < 10 && remainingPool.length > 0) {
-          const idx = Math.floor(Math.random() * remainingPool.length);
-          selected.push(remainingPool[idx]);
-          remainingPool.splice(idx, 1);
-        }
-
-        // Shuffle selected
-        selected.sort(() => Math.random() - 0.5);
-
-        setImages(selected);
-        setQuestion(QUESTIONS[Math.floor(Math.random() * QUESTIONS.length)]);
-        setLoading(false);
-      } catch (err) {
-        console.error("Survey 2 Error:", err);
-        setError("Failed to load survey images. Please try again later.");
-        setLoading(false);
+    setSubmitted(false);
+    setSlots([null, null, null, null, null]);
+    console.log('Survey 2: Initializing 3-question flow...');
+    try {
+      const res = await fetch('/api/images');
+      if (!res.ok) throw new Error('Failed to fetch images');
+      const data = await res.json();
+      
+      const allImages: string[] = data.images || [];
+      if (allImages.length === 0) {
+        throw new Error('No images found in images directory');
       }
+
+      // Shuffle and select exactly 5 random images
+      const selected = [...allImages].sort(() => Math.random() - 0.5).slice(0, 5);
+      setUnranked(selected);
+
+      // Shuffle the 3 unique questions
+      const shuffledQuestions = [...QUESTIONS].sort(() => Math.random() - 0.5);
+      setQuestionsList(shuffledQuestions);
+      setCurrentQuestionIndex(0);
+      setLoading(false);
+    } catch (err: any) {
+      console.error("Survey 2 Error:", err);
+      setError("Failed to load survey images. Please try again later.");
+      setLoading(false);
+    }
+  };
+
+  const loadNextQuestion = async (nextIndex: number) => {
+    setLoading(true);
+    setSlots([null, null, null, null, null]);
+    console.log(`Survey 2: Loading question ${nextIndex + 1}...`);
+    try {
+      const res = await fetch('/api/images');
+      if (!res.ok) throw new Error('Failed to fetch images');
+      const data = await res.json();
+      
+      const allImages: string[] = data.images || [];
+      if (allImages.length === 0) {
+        throw new Error('No images found in images directory');
+      }
+
+      // Shuffle and select exactly 5 new random images
+      const selected = [...allImages].sort(() => Math.random() - 0.5).slice(0, 5);
+      setUnranked(selected);
+      setCurrentQuestionIndex(nextIndex);
+      setLoading(false);
+    } catch (err: any) {
+      console.error("Survey 2 Error:", err);
+      setError("Failed to load next survey question. Please try again later.");
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    loadData();
+    loadInitialData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleSelect = async (chosenImage: string) => {
-    setLoading(true);
-    await fetch('/api/survey2', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ question, chosenImage, displayedImages: images }),
-    });
-    loadData();
+  // Click handler to move from unranked to first available slot
+  const handleUnrankedClick = (img: string, idx: number) => {
+    const firstEmpty = slots.findIndex(s => s === null);
+    if (firstEmpty !== -1) {
+      const newSlots = [...slots];
+      newSlots[firstEmpty] = img;
+      setSlots(newSlots);
+      setUnranked(prev => prev.filter((_, i) => i !== idx));
+    }
   };
 
-  if (loading) return <div>Loading...</div>;
-  if (error) return <div className="card"><p style={{color: 'red'}}>{error}</p></div>;
+  // Click handler to remove from slot back to unranked
+  const handleRemoveClick = (img: string, slotIdx: number) => {
+    const newSlots = [...slots];
+    newSlots[slotIdx] = null;
+    setSlots(newSlots);
+    setUnranked(prev => [...prev, img]);
+  };
+
+  // Drag start handlers
+  const handleDragStartUnranked = (index: number) => {
+    setDraggedSource('unranked');
+    setDraggedIndex(index);
+  };
+
+  const handleDragStartSlot = (index: number) => {
+    setDraggedSource('slots');
+    setDraggedIndex(index);
+  };
+
+  // Drag over handler
+  const handleDragOverSlot = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    setDragOverIndex(index);
+  };
+
+  // Drop on slot handler
+  const handleDropSlot = (targetIdx: number) => {
+    if (draggedIndex === null || !draggedSource) return;
+
+    const newSlots = [...slots];
+    const newUnranked = [...unranked];
+
+    if (draggedSource === 'unranked') {
+      const robot = unranked[draggedIndex];
+      const existing = slots[targetIdx];
+
+      newSlots[targetIdx] = robot;
+      if (existing) {
+        newUnranked[draggedIndex] = existing;
+      } else {
+        newUnranked.splice(draggedIndex, 1);
+      }
+    } else if (draggedSource === 'slots') {
+      const robot = slots[draggedIndex];
+      if (robot) {
+        const existing = slots[targetIdx];
+        newSlots[targetIdx] = robot;
+        newSlots[draggedIndex] = existing;
+      }
+    }
+
+    setSlots(newSlots);
+    setUnranked(newUnranked);
+    setDraggedIndex(null);
+    setDraggedSource(null);
+    setDragOverIndex(null);
+  };
+
+  // Drop back to unranked container handler
+  const handleDropUnranked = () => {
+    if (draggedIndex === null || draggedSource !== 'slots') return;
+    
+    const robot = slots[draggedIndex];
+    if (robot) {
+      const newSlots = [...slots];
+      newSlots[draggedIndex] = null;
+      setSlots(newSlots);
+      setUnranked(prev => [...prev, robot]);
+    }
+    
+    setDraggedIndex(null);
+    setDraggedSource(null);
+  };
+
+  const handleSubmit = async () => {
+    if (!slots.every(s => s !== null)) return;
+    
+    setLoading(true);
+    const question = questionsList[currentQuestionIndex];
+    try {
+      const res = await fetch('/api/survey2', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question, ranking: slots }),
+      });
+      if (!res.ok) throw new Error('Failed to save survey 2 ranking');
+      
+      const nextIndex = currentQuestionIndex + 1;
+      if (nextIndex >= 3) {
+        setSubmitted(true);
+        setLoading(false);
+      } else {
+        await loadNextQuestion(nextIndex);
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Failed to submit ranking. Please try again.");
+      setLoading(false);
+    }
+  };
+
+  if (loading) return <div style={{ textAlign: 'center', marginTop: '4rem' }}>Loading Survey 2...</div>;
+  if (error) return <div className="card"><p style={{color: 'red'}}>{error}</p><button onClick={loadInitialData}>Retry</button></div>;
+
+  if (submitted) {
+    return (
+      <div className="card" style={{ maxWidth: '600px', margin: '2rem auto' }}>
+        <h2 style={{ color: '#22c55e' }}>🎉 Congratulations!</h2>
+        <p style={{ fontSize: '1.05rem', margin: '1rem 0' }}>
+          You have successfully completed all 3 ranking tasks in Survey 2!
+        </p>
+        <p style={{ color: '#71717a', fontSize: '0.9rem' }}>
+          Your responses have been saved to help us analyze the relationship between robot realism and preference.
+        </p>
+        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginTop: '2.5rem' }}>
+          <button onClick={loadInitialData}>Take Survey Again</button>
+          <Link href="/analytics">
+            <button style={{ background: '#71717a' }}>View Analytics Dashboard</button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const isComplete = slots.every(s => s !== null);
+  const currentQuestion = questionsList[currentQuestionIndex] || "";
 
   return (
-    <div className="card" style={{ maxWidth: '1000px' }}>
-      <h2>{question}</h2>
-      <p>Select one image from the options below:</p>
+    <div className="card survey2-container">
+      <div style={{ float: 'right', fontSize: '0.85rem', color: '#71717a', fontWeight: 'bold' }}>
+        Task {currentQuestionIndex + 1} of 3
+      </div>
+      <div style={{ clear: 'both' }} />
 
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
-        gap: '1rem',
-        marginTop: '2rem'
-      }}>
-        {images.map(img => (
-          <div 
-            key={img} 
-            style={{ 
-              cursor: 'pointer', 
-              border: '2px solid transparent', 
-              borderRadius: '8px',
-              overflow: 'hidden',
-              transition: 'transform 0.2s'
-            }}
-            onMouseOver={e => e.currentTarget.style.transform = 'scale(1.05)'}
-            onMouseOut={e => e.currentTarget.style.transform = 'scale(1)'}
-            onClick={() => handleSelect(img)}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`/images/${img}`} alt="Robot Option" style={{ width: '100%', display: 'block' }} />
-          </div>
-        ))}
+      <h2>Rank the robots for this task:</h2>
+      <h3 style={{ color: 'var(--primary)', margin: '1rem 0' }}>"{currentQuestion}"</h3>
+      
+      <p style={{ color: '#71717a', fontSize: '0.9rem', marginBottom: '2rem' }}>
+        Drag and drop the robots from the pool into the spectrum slots, or click them to auto-fill left to right. Drag items between slots to swap them.
+      </p>
+
+      {/* Empty Spectrum Drag & Drop Area */}
+      <div className="spectrum-container">
+        <div className="spectrum-label-row">
+          <span className="label-best">← Best / Most Fit (Green)</span>
+          <span className="label-worst">Worst / Least Fit (Red) →</span>
+        </div>
+        
+        <div className="spectrum-slots">
+          {[0, 1, 2, 3, 4].map(idx => {
+            const img = slots[idx];
+            return (
+              <div
+                key={idx}
+                className={`spectrum-slot slot-${idx} ${dragOverIndex === idx ? 'drag-over' : ''}`}
+                onDragOver={(e) => handleDragOverSlot(e, idx)}
+                onDragLeave={() => setDragOverIndex(null)}
+                onDrop={() => handleDropSlot(idx)}
+              >
+                <span className="slot-rank-num">#{idx + 1}</span>
+                
+                {img ? (
+                  <div
+                    className="slot-filled-item"
+                    draggable
+                    onDragStart={() => handleDragStartSlot(idx)}
+                  >
+                    <button
+                      className="slot-remove-btn"
+                      onClick={() => handleRemoveClick(img, idx)}
+                      title="Remove"
+                    >
+                      ✕
+                    </button>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={`/images/${img}`}
+                      alt="Ranked robot"
+                      className="slot-filled-img"
+                    />
+                  </div>
+                ) : (
+                  <span className="slot-empty-text">Empty Slot</span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Unranked Pool */}
+      <div className="unranked-title">Robots Pool</div>
+      <div
+        className="unranked-pool"
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={handleDropUnranked}
+      >
+        {unranked.length === 0 && !isComplete ? (
+          <span style={{ color: '#71717a' }}>Drag robots here to unrank them</span>
+        ) : unranked.length === 0 && isComplete ? (
+          <span style={{ color: '#22c55e', fontWeight: 'bold' }}>All robots placed! Ready to submit.</span>
+        ) : (
+          unranked.map((img, idx) => (
+            <div
+              key={img}
+              className="unranked-item"
+              draggable
+              onDragStart={() => handleDragStartUnranked(idx)}
+              onClick={() => handleUnrankedClick(img, idx)}
+              title="Click to place or drag me"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={`/images/${img}`}
+                alt="Unranked robot"
+                className="unranked-img"
+              />
+            </div>
+          ))
+        )}
+      </div>
+
+      <div style={{ marginTop: '2rem' }}>
+        <button
+          onClick={handleSubmit}
+          disabled={!isComplete}
+          style={{
+            padding: '1rem 2.5rem',
+            fontSize: '1.1rem',
+            opacity: isComplete ? 1 : 0.5,
+            cursor: isComplete ? 'pointer' : 'not-allowed',
+            background: isComplete ? '#22c55e' : '#a1a1aa'
+          }}
+        >
+          {currentQuestionIndex + 1 === 3 ? "Submit & Complete Survey" : "Submit & Next Task"}
+        </button>
       </div>
     </div>
   );

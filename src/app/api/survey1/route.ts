@@ -25,18 +25,30 @@ export async function GET() {
     }
     
     return NextResponse.json({ data, stats });
-  } catch (error) {
+  } catch (error: any) {
+    if (error.code === 'ENOENT') {
+      return NextResponse.json({ data: [], stats: {} });
+    }
     return NextResponse.json({ error: 'Failed to read data' }, { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
   const { image, rating } = await request.json();
-  const dataPath = path.join(process.cwd(), 'data', 'survey1.json');
+  const dataDir = path.join(process.cwd(), 'data');
+  const dataPath = path.join(dataDir, 'survey1.json');
   
   try {
-    const rawData = await fs.readFile(dataPath, 'utf-8');
-    const data = JSON.parse(rawData);
+    await fs.mkdir(dataDir, { recursive: true });
+    let data = [];
+    try {
+      const rawData = await fs.readFile(dataPath, 'utf-8');
+      data = JSON.parse(rawData);
+    } catch (readError: any) {
+      if (readError.code !== 'ENOENT') {
+        throw readError;
+      }
+    }
     
     data.push({ image, rating, timestamp: Date.now() });
     
@@ -44,6 +56,7 @@ export async function POST(request: Request) {
     
     return NextResponse.json({ success: true });
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to save data' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to save data', details: String(error) }, { status: 500 });
   }
 }
+
