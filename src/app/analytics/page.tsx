@@ -41,6 +41,7 @@ export default function Analytics() {
           average: number;
           count: number;
           mode: number;
+          variance: number;
           distribution: Record<number, number>;
           maxDistCount: number;
         }>> = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [] };
@@ -455,7 +456,7 @@ export default function Analytics() {
                     No ranking responses submitted for this task yet.
                   </div>
                 ) : (
-                  topRobots.map((robot, idx) => (
+                  topRobots.map((robot: any, idx: number) => (
                     <div key={robot.image} className="rank-item">
                       <div className="rank-badge">{idx + 1}</div>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
