@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
+import { addSurvey2Ranking } from '@/lib/responses';
 
 export async function GET() {
   const dataPath = path.join(process.cwd(), 'data', 'survey2.json');
@@ -40,6 +41,12 @@ export async function POST(request: Request) {
         ranking: body.ranking,
         timestamp: Date.now()
       });
+      
+      // Save to responses.json if sessionId is present
+      if (body.sessionId) {
+        const parsedAge = body.age !== undefined && body.age !== null && body.age !== '' ? Number(body.age) : null;
+        await addSurvey2Ranking(body.sessionId, parsedAge, body.question, body.ranking);
+      }
     } else {
       data.push({
         question: body.question,
@@ -47,6 +54,13 @@ export async function POST(request: Request) {
         displayedImages: body.displayedImages,
         timestamp: Date.now()
       });
+      
+      // Save to responses.json if sessionId is present
+      if (body.sessionId) {
+        const parsedAge = body.age !== undefined && body.age !== null && body.age !== '' ? Number(body.age) : null;
+        // In the old layout, they choose one image. Let's record it as ranking of 1 item for simplicity or compatibility
+        await addSurvey2Ranking(body.sessionId, parsedAge, body.question, body.chosenImage ? [body.chosenImage] : []);
+      }
     }
     
     await fs.writeFile(dataPath, JSON.stringify(data, null, 2));
@@ -56,4 +70,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Failed to save data', details: String(error) }, { status: 500 });
   }
 }
+
 

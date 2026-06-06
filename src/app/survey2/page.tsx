@@ -176,10 +176,13 @@ export default function Survey2() {
     setLoading(true);
     const question = questionsList[currentQuestionIndex];
     try {
+      const sessionId = localStorage.getItem('survey_session_id');
+      const age = localStorage.getItem('survey_user_age');
+
       const res = await fetch('/api/survey2', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question, ranking: slots }),
+        body: JSON.stringify({ question, ranking: slots, sessionId, age }),
       });
       if (!res.ok) throw new Error('Failed to save survey 2 ranking');
       
@@ -196,6 +199,7 @@ export default function Survey2() {
       setLoading(false);
     }
   };
+
 
   if (loading) return <div style={{ textAlign: 'center', marginTop: '4rem' }}>Loading Survey 2...</div>;
   if (error) return <div className="card"><p style={{color: 'red'}}>{error}</p><button onClick={loadInitialData}>Retry</button></div>;

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
+import { addSurvey1Rating } from '@/lib/responses';
 
 export async function GET() {
   const dataPath = path.join(process.cwd(), 'data', 'survey1.json');
@@ -34,7 +35,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const { image, rating } = await request.json();
+  const { image, rating, sessionId, age } = await request.json();
   const dataDir = path.join(process.cwd(), 'data');
   const dataPath = path.join(dataDir, 'survey1.json');
   
@@ -54,9 +55,16 @@ export async function POST(request: Request) {
     
     await fs.writeFile(dataPath, JSON.stringify(data, null, 2));
     
+    // If sessionId is present, also track in responses.json
+    if (sessionId) {
+      const parsedAge = age !== undefined && age !== null && age !== '' ? Number(age) : null;
+      await addSurvey1Rating(sessionId, parsedAge, image, rating);
+    }
+    
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to save data', details: String(error) }, { status: 500 });
   }
 }
+
 
