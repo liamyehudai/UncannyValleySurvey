@@ -1,8 +1,8 @@
 import fs from 'fs/promises';
 import path from 'path';
 
-// Define the path to the responses.json file outside the data folder (in the root)
-const RESPONSES_FILE = path.join(process.cwd(), 'responses.json');
+// Define the path to the responses.json file in the data folder
+const RESPONSES_FILE = path.join(process.cwd(), 'data', 'responses.json');
 
 export interface SessionResponse {
   sessionId: string;

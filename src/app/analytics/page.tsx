@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 
 const QUESTIONS = [
@@ -9,294 +9,420 @@ const QUESTIONS = [
   "Which robot would you prefer clean your home?"
 ];
 
+// Helper function to detect low-quality outlier responses
+function detectOutliers(session: any) {
+  const reasons: string[] = [];
+
+  // 1. Incomplete Session Check
+  // A complete session must have at least 5 survey1 ratings AND 3 survey2 task rankings
+  const s1Complete = session.survey1 && session.survey1.length >= 5;
+  const s2Complete = session.survey2 && session.survey2.length >= 3;
+  if (!s1Complete || !s2Complete) {
+    reasons.push("Incomplete data");
+  }
+
+  // 2. Age Check (under 12 or over 95)
+  if (session.age !== undefined && session.age !== null) {
+    const ageNum = Number(session.age);
+    if (ageNum < 12 || ageNum > 95) {
+      reasons.push(`Implausible age (${ageNum})`);
+    }
+  } else {
+    reasons.push("Missing age");
+  }
+
+  // 3. Straight-lining Check (giving the exact same rating for all images in Survey 1)
+  if (s1Complete) {
+    const ratings = session.survey1.map((r: any) => r.rating);
+    const firstRating = ratings[0];
+    const allSame = ratings.every((r: number) => r === firstRating);
+    if (allSame) {
+      reasons.push(`Straight-lining (rated all images ${firstRating})`);
+    }
+  }
+
+  // 4. Speed-running Check (average time per rating < 1.5 seconds or click interval < 800ms)
+  if (session.survey1 && session.survey1.length >= 2) {
+    const sortedS1 = [...session.survey1].sort((a, b) => a.timestamp - b.timestamp);
+    let rapidClicks = 0;
+    
+    const s1Duration = sortedS1[sortedS1.length - 1].timestamp - sortedS1[0].timestamp;
+    const avgTimePerQuestion = s1Duration / (sortedS1.length - 1);
+    
+    for (let i = 1; i < sortedS1.length; i++) {
+      const delta = sortedS1[i].timestamp - sortedS1[i - 1].timestamp;
+      if (delta < 800) {
+        rapidClicks++;
+      }
+    }
+    
+    if (avgTimePerQuestion < 1500 || rapidClicks >= 2) {
+      reasons.push(`Speed-running (avg ${(avgTimePerQuestion / 1000).toFixed(1)}s/question)`);
+    }
+  }
+
+  return {
+    isOutlier: reasons.length > 0,
+    reasons
+  };
+}
+
 export default function Analytics() {
-  const [data, setData] = useState<any>(null);
+  const [rawResponses, setRawResponses] = useState<any[]>([]);
+  const [excludeOutliers, setExcludeOutliers] = useState(true);
   const [loading, setLoading] = useState(true);
 
+  // Age Filter States
+  const [minAge, setMinAge] = useState(1);
+  const [maxAge, setMaxAge] = useState(120);
+  const [agePreset, setAgePreset] = useState('all');
+
+  const handlePresetChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const preset = e.target.value;
+    setAgePreset(preset);
+    if (preset === 'all') {
+      setMinAge(1);
+      setMaxAge(120);
+    } else if (preset === '17-24') {
+      setMinAge(17);
+      setMaxAge(24);
+    } else if (preset === '25-34') {
+      setMinAge(25);
+      setMaxAge(34);
+    } else if (preset === '35-44') {
+      setMinAge(35);
+      setMaxAge(44);
+    } else if (preset === '45-54') {
+      setMinAge(45);
+      setMaxAge(54);
+    } else if (preset === '55-64') {
+      setMinAge(55);
+      setMaxAge(64);
+    } else if (preset === '65+') {
+      setMinAge(65);
+      setMaxAge(120);
+    }
+  };
+
   useEffect(() => {
-    async function loadData() {
-      console.log('Analytics: Fetching data...');
+    async function loadResponses() {
+      console.log('Analytics: Fetching session responses...');
       try {
-        const [s1, s2] = await Promise.all([
-          fetch('/api/survey1').then(async r => {
-            if (!r.ok) throw new Error('Failed to fetch survey1');
-            const data = await r.json();
-            console.log('Analytics: Survey 1 data:', data);
-            return data;
-          }),
-          fetch('/api/survey2').then(async r => {
-            if (!r.ok) throw new Error('Failed to fetch survey2');
-            const data = await r.json();
-            console.log('Analytics: Survey 2 data:', data);
-            return data;
-          })
-        ]);
-        
-        const stats1 = s1.stats || {};
-        const survey2Data = s2.data || [];
-        
-        // 1. Group images into pools 1-7 with detailed statistics from Survey 1
-        const pools: Record<number, Array<{
-          image: string;
-          average: number;
-          count: number;
-          mode: number;
-          variance: number;
-          distribution: Record<number, number>;
-          maxDistCount: number;
-        }>> = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [] };
+        const res = await fetch('/api/responses');
+        if (!res.ok) throw new Error('Failed to fetch responses');
+        const responses = await res.json();
+        console.log(`Analytics: Successfully fetched ${responses.length} responses.`);
+        setRawResponses(responses);
+        setLoading(false);
+      } catch (err) {
+        console.error('Analytics: Error loading responses', err);
+        setLoading(false);
+      }
+    }
+    loadResponses();
+  }, []);
 
-        const getMode = (arr: number[]) => {
-          if (!arr.length) return 0;
-          const counts: Record<number, number> = {};
-          let maxCount = 0;
-          let mode = arr[0];
-          for (const num of arr) {
-            counts[num] = (counts[num] || 0) + 1;
-            if (counts[num] > maxCount) {
-              maxCount = counts[num];
-              mode = num;
-            }
+  const data = useMemo(() => {
+    if (rawResponses.length === 0) return null;
+
+    // Run outlier detection on all sessions
+    const sessionsWithOutlierStatus = rawResponses.map(session => {
+      const outlierStatus = detectOutliers(session);
+      return {
+        ...session,
+        isOutlier: outlierStatus.isOutlier,
+        outlierReasons: outlierStatus.reasons
+      };
+    });
+
+    const filteredOutliers = excludeOutliers
+      ? sessionsWithOutlierStatus.filter(s => !s.isOutlier)
+      : sessionsWithOutlierStatus;
+
+    // Isolate by age range
+    const activeSessions = filteredOutliers.filter(session => {
+      if (session.age === null || session.age === undefined) return false;
+      const ageNum = Number(session.age);
+      return ageNum >= minAge && ageNum <= maxAge;
+    });
+
+    // 1. Group images into pools 1-7 with detailed statistics from Survey 1
+    const stats1: Record<string, { total: number; count: number; average: number; ratings: number[] }> = {};
+    activeSessions.forEach(session => {
+      if (!session.survey1) return;
+      session.survey1.forEach((entry: any) => {
+        const img = entry.image;
+        const rating = entry.rating;
+        if (!stats1[img]) {
+          stats1[img] = { total: 0, count: 0, average: 0, ratings: [] };
+        }
+        stats1[img].total += rating;
+        stats1[img].count += 1;
+        stats1[img].ratings.push(rating);
+      });
+    });
+
+    for (const key in stats1) {
+      stats1[key].average = stats1[key].total / stats1[key].count;
+    }
+
+    const pools: Record<number, Array<{
+      image: string;
+      average: number;
+      count: number;
+      mode: number;
+      variance: number;
+      distribution: Record<number, number>;
+      maxDistCount: number;
+    }>> = { 1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: [] };
+
+    const getMode = (arr: number[]) => {
+      if (!arr.length) return 0;
+      const counts: Record<number, number> = {};
+      let maxCount = 0;
+      let mode = arr[0];
+      for (const num of arr) {
+        counts[num] = (counts[num] || 0) + 1;
+        if (counts[num] > maxCount) {
+          maxCount = counts[num];
+          mode = num;
+        }
+      }
+      return mode;
+    };
+
+    for (const img in stats1) {
+      const item = stats1[img];
+      if (item.count > 0) {
+        const rounded = Math.round(item.average);
+        const clamped = Math.max(1, Math.min(7, rounded));
+        
+        // Calculate distribution
+        const distribution: Record<number, number> = { 1:0, 2:0, 3:0, 4:0, 5:0, 6:0, 7:0 };
+        item.ratings.forEach((r: number) => {
+          if (r >= 1 && r <= 7) {
+            distribution[r]++;
           }
-          return mode;
-        };
+        });
+        const maxDistCount = Math.max(...Object.values(distribution), 1);
 
-        for (const img in stats1) {
-          const item = stats1[img];
-          if (item.count > 0) {
-            const rounded = Math.round(item.average);
-            const clamped = Math.max(1, Math.min(7, rounded));
+        // Calculate variance for realism ratings
+        const mean = item.average;
+        const sumSquareDiffs = item.ratings.reduce((sum: number, val: number) => sum + Math.pow(val - mean, 2), 0);
+        const variance = item.ratings.length > 1 ? sumSquareDiffs / item.ratings.length : 0;
+
+        pools[clamped].push({
+          image: img,
+          average: item.average,
+          count: item.count,
+          mode: getMode(item.ratings),
+          variance,
+          distribution,
+          maxDistCount
+        });
+      }
+    }
+
+    // Sort images within each pool by their average realism score
+    for (const key in pools) {
+      pools[Number(key)].sort((a, b) => a.average - b.average);
+    }
+
+    // 2. Process Survey 2 rankings & scores
+    const poolScores: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 };
+    const poolVotes: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 };
+    const overallRobotScores: Record<string, number[]> = {};
+    
+    const taskRobotScores: Record<string, Record<string, number[]>> = {
+      "Which robot would you prefer to serve you food?": {},
+      "Which robot would you prefer to take care of a sick loved one?": {},
+      "Which robot would you prefer clean your home?": {}
+    };
+
+    activeSessions.forEach(session => {
+      if (!session.survey2) return;
+      session.survey2.forEach((entry: any) => {
+        const q = entry.question;
+        if (!taskRobotScores[q]) {
+          taskRobotScores[q] = {};
+        }
+
+        if (entry.ranking && Array.isArray(entry.ranking)) {
+          // New ranking format: 5 elements, score is 5, 4, 3, 2, 1
+          entry.ranking.forEach((img: string, idx: number) => {
+            const score = 5 - idx;
             
-            // Calculate distribution
-            const distribution: Record<number, number> = { 1:0, 2:0, 3:0, 4:0, 5:0, 6:0, 7:0 };
-            item.ratings.forEach((r: number) => {
-              if (r >= 1 && r <= 7) {
-                distribution[r]++;
-              }
-            });
-            const maxDistCount = Math.max(...Object.values(distribution), 1);
-
-            // Calculate variance for realism ratings
-            const mean = item.average;
-            const sumSquareDiffs = item.ratings.reduce((sum: number, val: number) => sum + Math.pow(val - mean, 2), 0);
-            const variance = item.ratings.length > 1 ? sumSquareDiffs / item.ratings.length : 0;
-
-            pools[clamped].push({
-              image: img,
-              average: item.average,
-              count: item.count,
-              mode: getMode(item.ratings),
-              variance,
-              distribution,
-              maxDistCount
-            });
-          }
-        }
-
-        // Sort images within each pool by their average realism score
-        for (const key in pools) {
-          pools[Number(key)].sort((a, b) => a.average - b.average);
-        }
-
-        // 2. Process Survey 2 rankings & scores
-        const poolScores: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 };
-        const poolVotes: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0 };
-        const overallRobotScores: Record<string, number[]> = {};
-        
-        const taskRobotScores: Record<string, Record<string, number[]>> = {
-          "Which robot would you prefer to serve you food?": {},
-          "Which robot would you prefer to take care of a sick loved one?": {},
-          "Which robot would you prefer clean your home?": {}
-        };
-
-        for (const entry of survey2Data) {
-          const q = entry.question;
-          if (!taskRobotScores[q]) {
-            taskRobotScores[q] = {};
-          }
-
-          if (entry.ranking && Array.isArray(entry.ranking)) {
-            // New ranking format: 5 elements, score is 5, 4, 3, 2, 1
-            entry.ranking.forEach((img: string, idx: number) => {
-              const score = 5 - idx;
-              
-              // Accumulate pool score based on robot's Survey 1 rating
-              if (stats1[img] && stats1[img].count > 0) {
-                const roundedRating = Math.max(1, Math.min(7, Math.round(stats1[img].average)));
-                poolScores[roundedRating] += score;
-                poolVotes[roundedRating] += 1;
-              }
-
-              // Overall robot scores
-              if (!overallRobotScores[img]) overallRobotScores[img] = [];
-              overallRobotScores[img].push(score);
-
-              // Task-specific scores
-              if (!taskRobotScores[q][img]) taskRobotScores[q][img] = [];
-              taskRobotScores[q][img].push(score);
-            });
-          } else if (entry.chosenImage) {
-            // Old format fallback: chosen gets 5 points
-            const img = entry.chosenImage;
-            const score = 5;
-
+            // Accumulate pool score based on robot's Survey 1 rating
             if (stats1[img] && stats1[img].count > 0) {
               const roundedRating = Math.max(1, Math.min(7, Math.round(stats1[img].average)));
               poolScores[roundedRating] += score;
               poolVotes[roundedRating] += 1;
             }
 
+            // Overall robot scores
             if (!overallRobotScores[img]) overallRobotScores[img] = [];
             overallRobotScores[img].push(score);
 
+            // Task-specific scores
             if (!taskRobotScores[q][img]) taskRobotScores[q][img] = [];
             taskRobotScores[q][img].push(score);
-          }
-        }
-
-        // Helper stats calculation
-        const getMeanNum = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
-        
-        const calculateDetailedStats = (scores: number[]) => {
-          if (!scores || scores.length === 0) return { mean: 0, median: 0, mode: 0, variance: 0, count: 0 };
-          const count = scores.length;
-          const mean = scores.reduce((a, b) => a + b, 0) / count;
-          
-          const sorted = [...scores].sort((a, b) => a - b);
-          const mid = Math.floor(count / 2);
-          const median = count % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-          
-          const counts: Record<number, number> = {};
-          let maxCount = 0;
-          let mode = sorted[0];
-          for (const num of sorted) {
-            counts[num] = (counts[num] || 0) + 1;
-            if (counts[num] > maxCount) {
-              maxCount = counts[num];
-              mode = num;
-            }
-          }
-          
-          const sumSquareDiffs = scores.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0);
-          const variance = sumSquareDiffs / count;
-
-          return { mean, median, mode, variance, count };
-        };
-
-        // Determine which pool was chosen the most (by accumulated score)
-        let bestPool = 0;
-        let bestPoolScore = -1;
-        for (let i = 1; i <= 7; i++) {
-          if (poolScores[i] > bestPoolScore) {
-            bestPoolScore = poolScores[i];
-            bestPool = i;
-          }
-        }
-
-        // Determine the best overall robot (by average score)
-        let bestRobot = "";
-        let bestRobotAvg = 0;
-        for (const img in overallRobotScores) {
-          const avg = getMeanNum(overallRobotScores[img]);
-          if (avg > bestRobotAvg) {
-            bestRobotAvg = avg;
-            bestRobot = img;
-          }
-        }
-
-        // Determine top 5 robots for each task
-        const topRobotsByTask: Record<string, Array<{
-          image: string;
-          mean: number;
-          median: number;
-          mode: number;
-          variance: number;
-          count: number;
-        }>> = {};
-
-        for (const task in taskRobotScores) {
-          const robots = taskRobotScores[task];
-          const robotList = [];
-          for (const img in robots) {
-            const scores = robots[img];
-            const stats = calculateDetailedStats(scores);
-            robotList.push({
-              image: img,
-              ...stats
-            });
-          }
-          // Sort descending by mean score
-          robotList.sort((a, b) => b.mean - a.mean);
-          topRobotsByTask[task] = robotList.slice(0, 5);
-        }
-
-        // We also pass qStats for the task answers distribution
-        const questionsData: Record<string, number[]> = {};
-        for (const entry of survey2Data) {
-          const q = entry.question;
-          let imagesList: string[] = [];
-          if (entry.ranking) {
-            imagesList = entry.ranking;
-          } else if (entry.chosenImage) {
-            imagesList = [entry.chosenImage];
-          }
-          if (!questionsData[q]) questionsData[q] = [];
-          imagesList.forEach(img => {
-            if (stats1[img] && stats1[img].count > 0) {
-              const roundedRating = Math.max(1, Math.min(7, Math.round(stats1[img].average)));
-              questionsData[q].push(roundedRating);
-            }
           });
         }
-        
-        const getMedian = (arr: number[]) => {
-          if (!arr.length) return 0;
-          const s = [...arr].sort((a,b)=>a-b);
-          const mid = Math.floor(s.length / 2);
-          return s.length % 2 !== 0 ? s[mid] : ((s[mid - 1] + s[mid]) / 2).toFixed(2);
-        };
-        const getModeOverall = (arr: number[]) => {
-          if (!arr.length) return 0;
-          const counts: Record<number, number> = {};
-          let maxCount = 0;
-          let mode = arr[0];
-          for (const num of arr) {
-            counts[num] = (counts[num] || 0) + 1;
-            if (counts[num] > maxCount) {
-              maxCount = counts[num];
-              mode = num;
-            }
-          }
-          return mode;
-        };
+      });
+    });
 
-        const qStats = Object.keys(questionsData).map(q => ({
-          question: q,
-          answersCount: questionsData[q].length,
-          mean: getMeanNum(questionsData[q]).toFixed(2),
-          median: getMedian(questionsData[q]),
-          mode: getModeOverall(questionsData[q])
-        }));
+    // Helper stats calculation
+    const getMeanNum = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+    
+    const calculateDetailedStats = (scores: number[]) => {
+      if (!scores || scores.length === 0) return { mean: 0, median: 0, mode: 0, variance: 0, count: 0 };
+      const count = scores.length;
+      const mean = scores.reduce((a, b) => a + b, 0) / count;
+      
+      const sorted = [...scores].sort((a, b) => a - b);
+      const mid = Math.floor(count / 2);
+      const median = count % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+      
+      const counts: Record<number, number> = {};
+      let maxCount = 0;
+      let mode = sorted[0];
+      for (const num of sorted) {
+        counts[num] = (counts[num] || 0) + 1;
+        if (counts[num] > maxCount) {
+          maxCount = counts[num];
+          mode = num;
+        }
+      }
+      
+      const sumSquareDiffs = scores.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0);
+      const variance = sumSquareDiffs / count;
 
-        setData({
-          pools,
-          qStats,
-          poolScores,
-          poolVotes,
-          bestPool,
-          bestPoolScore,
-          bestRobot,
-          bestRobotAvg,
-          topRobotsByTask
-        });
-        setLoading(false);
-      } catch (err) {
-        console.error('Analytics: Error loading data', err);
-        setLoading(false);
+      return { mean, median, mode, variance, count };
+    };
+
+    // Determine which pool was chosen the most (by accumulated score)
+    let bestPool = 0;
+    let bestPoolScore = -1;
+    for (let i = 1; i <= 7; i++) {
+      if (poolScores[i] > bestPoolScore) {
+        bestPoolScore = poolScores[i];
+        bestPool = i;
       }
     }
-    loadData();
-  }, []);
+
+    // Determine the best overall robot (by average score)
+    let bestRobot = "";
+    let bestRobotAvg = 0;
+    for (const img in overallRobotScores) {
+      const avg = getMeanNum(overallRobotScores[img]);
+      if (avg > bestRobotAvg) {
+        bestRobotAvg = avg;
+        bestRobot = img;
+      }
+    }
+
+    // Determine top 5 robots for each task
+    const topRobotsByTask: Record<string, Array<{
+      image: string;
+      mean: number;
+      median: number;
+      mode: number;
+      variance: number;
+      count: number;
+    }>> = {};
+
+    for (const task in taskRobotScores) {
+      const robots = taskRobotScores[task];
+      const robotList = [];
+      for (const img in robots) {
+        const scores = robots[img];
+        const stats = calculateDetailedStats(scores);
+        robotList.push({
+          image: img,
+          ...stats
+        });
+      }
+      // Sort descending by mean score
+      robotList.sort((a, b) => b.mean - a.mean);
+      topRobotsByTask[task] = robotList.slice(0, 5);
+    }
+
+    // We also pass qStats for the task answers distribution
+    const questionsData: Record<string, number[]> = {};
+    activeSessions.forEach(session => {
+      if (!session.survey2) return;
+      session.survey2.forEach((entry: any) => {
+        const q = entry.question;
+        let imagesList: string[] = [];
+        if (entry.ranking) {
+          imagesList = entry.ranking;
+        }
+        if (!questionsData[q]) questionsData[q] = [];
+        imagesList.forEach(img => {
+          if (stats1[img] && stats1[img].count > 0) {
+            const roundedRating = Math.max(1, Math.min(7, Math.round(stats1[img].average)));
+            questionsData[q].push(roundedRating);
+          }
+        });
+      });
+    });
+    
+    const getMedian = (arr: number[]) => {
+      if (!arr.length) return 0;
+      const s = [...arr].sort((a,b)=>a-b);
+      const mid = Math.floor(s.length / 2);
+      return s.length % 2 !== 0 ? s[mid] : ((s[mid - 1] + s[mid]) / 2).toFixed(2);
+    };
+    const getModeOverall = (arr: number[]) => {
+      if (!arr.length) return 0;
+      const counts: Record<number, number> = {};
+      let maxCount = 0;
+      let mode = arr[0];
+      for (const num of arr) {
+        counts[num] = (counts[num] || 0) + 1;
+        if (counts[num] > maxCount) {
+          maxCount = counts[num];
+          mode = num;
+        }
+      }
+      return mode;
+    };
+
+    const qStats = Object.keys(questionsData).map(q => ({
+      question: q,
+      answersCount: questionsData[q].length,
+      mean: getMeanNum(questionsData[q]).toFixed(2),
+      median: getMedian(questionsData[q]),
+      mode: getModeOverall(questionsData[q])
+    }));
+
+    // Group outlier stats for UI display
+    const outlierCounts = {
+      total: sessionsWithOutlierStatus.length,
+      valid: sessionsWithOutlierStatus.filter(s => !s.isOutlier).length,
+      outliers: sessionsWithOutlierStatus.filter(s => s.isOutlier).length,
+      byReason: {
+        incomplete: sessionsWithOutlierStatus.filter(s => s.outlierReasons.some((r: string) => r.includes("Incomplete"))).length,
+        age: sessionsWithOutlierStatus.filter(s => s.outlierReasons.some((r: string) => r.includes("age") || r.includes("Age") || r.includes("age"))).length,
+        straightlining: sessionsWithOutlierStatus.filter(s => s.outlierReasons.some((r: string) => r.includes("Straight-lining"))).length,
+        speed: sessionsWithOutlierStatus.filter(s => s.outlierReasons.some((r: string) => r.includes("Speed"))).length,
+      }
+    };
+
+    return {
+      pools,
+      qStats,
+      poolScores,
+      poolVotes,
+      bestPool,
+      bestPoolScore,
+      bestRobot,
+      bestRobotAvg,
+      topRobotsByTask,
+      outlierCounts,
+      activeCohortSize: activeSessions.length
+    };
+  }, [rawResponses, excludeOutliers, minAge, maxAge]);
 
   const handleDownload = async () => {
     try {
@@ -322,7 +448,23 @@ export default function Analytics() {
   };
 
   if (loading) return <div style={{ textAlign: 'center', marginTop: '4rem' }}>Loading Analytics...</div>;
+  
+  if (rawResponses.length === 0) {
+    return (
+      <div className="card" style={{ maxWidth: '600px', margin: '2rem auto' }}>
+        <h2>No Data Available</h2>
+        <p style={{ color: '#71717a', margin: '1rem 0' }}>
+          No responses have been recorded in the survey responses file yet.
+        </p>
+        <Link href="/survey1">
+          <button style={{ marginTop: '1rem' }}>Take Survey 1</button>
+        </Link>
+      </div>
+    );
+  }
+
   if (!data) return <div>Error loading analytics data. Please try again later.</div>;
+
 
   return (
     <div className="card" style={{ textAlign: 'left', maxWidth: '1100px', margin: '0 auto' }}>
@@ -352,6 +494,142 @@ export default function Analytics() {
           </svg>
           Download JSON Data
         </button>
+      </div>
+
+      {/* Data Filters & Quality Control Panel */}
+      <div style={{ background: 'var(--background)', border: '1px solid var(--border)', borderRadius: '12px', padding: '1.5rem', marginBottom: '2.5rem' }}>
+        <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--foreground)' }}>
+          <span style={{ fontSize: '1.2rem' }}>⚙️</span> Analytics Filter Panel
+        </h4>
+        <p style={{ margin: '0.25rem 0 1.25rem 0', fontSize: '0.85rem', color: '#71717a' }}>
+          Refine the data pool by isolating user demographics (age ranges) and excluding outlier submissions.
+        </p>
+
+        <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
+          {/* Left Side: Demographic Filters */}
+          <div style={{ flex: '1 1 350px', display: 'flex', flexDirection: 'column', gap: '1rem', background: 'var(--card)', padding: '1.25rem', borderRadius: '10px', border: '1px solid var(--border)' }}>
+            <div style={{ fontWeight: '700', fontSize: '0.9rem', color: 'var(--foreground)' }}>👥 Demographic Isolation</div>
+            
+            {/* Age Preset Dropdown */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+              <label style={{ fontSize: '0.8rem', fontWeight: '600', color: '#71717a' }}>Age Group Presets:</label>
+              <select
+                value={agePreset}
+                onChange={handlePresetChange}
+                style={{
+                  padding: '0.5rem',
+                  borderRadius: '6px',
+                  border: '1px solid var(--border)',
+                  background: 'var(--background)',
+                  color: 'var(--foreground)',
+                  outline: 'none',
+                  fontSize: '0.9rem',
+                  fontWeight: '500'
+                }}
+              >
+                <option value="all">All Ages (1 - 120)</option>
+                <option value="17-24">17 to 24</option>
+                <option value="25-34">25 to 34</option>
+                <option value="35-44">35 to 44</option>
+                <option value="45-54">45 to 54</option>
+                <option value="55-64">55 to 64</option>
+                <option value="65+">65 or older</option>
+                <option value="custom">Custom Range (Slider)</option>
+              </select>
+            </div>
+
+            {/* Slider Range Display */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 'bold', color: 'var(--primary)', marginTop: '0.5rem' }}>
+              <span>Isolating Ages:</span>
+              <span>{minAge} - {maxAge} years old</span>
+            </div>
+
+            {/* Double Thumb Age Slider */}
+            <div style={{ padding: '0 0.5rem' }}>
+              <div className="age-slider-container">
+                <div 
+                  className="slider-track" 
+                  style={{ 
+                    left: `${((minAge - 1) / 119) * 100}%`, 
+                    right: `${100 - ((maxAge - 1) / 119) * 100}%` 
+                  }}
+                ></div>
+                <input
+                  type="range"
+                  min="1"
+                  max="120"
+                  value={minAge}
+                  onChange={(e) => {
+                    const value = Math.min(Number(e.target.value), maxAge - 1);
+                    setMinAge(value);
+                    setAgePreset("custom");
+                  }}
+                  className="thumb thumb-left"
+                  style={{ zIndex: minAge > 60 ? 5 : 4 }}
+                />
+                <input
+                  type="range"
+                  min="1"
+                  max="120"
+                  value={maxAge}
+                  onChange={(e) => {
+                    const value = Math.max(Number(e.target.value), minAge + 1);
+                    setMaxAge(value);
+                    setAgePreset("custom");
+                  }}
+                  className="thumb thumb-right"
+                  style={{ zIndex: minAge > 60 ? 4 : 5 }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Right Side: Data Quality and Outliers */}
+          <div style={{ flex: '1 1 350px', display: 'flex', flexDirection: 'column', gap: '1rem', background: 'var(--card)', padding: '1.25rem', borderRadius: '10px', border: '1px solid var(--border)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontWeight: '700', fontSize: '0.9rem', color: 'var(--foreground)' }}>🛡️ Data Quality & Outliers</div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: '600', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--foreground)' }}>
+                <input 
+                  type="checkbox" 
+                  checked={excludeOutliers} 
+                  onChange={(e) => setExcludeOutliers(e.target.checked)} 
+                  style={{ width: '1rem', height: '1rem', cursor: 'pointer' }}
+                />
+                Exclude Outliers
+              </label>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', textAlign: 'center', fontSize: '0.75rem' }}>
+              <div style={{ flex: 1, background: 'var(--background)', padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--border)' }}>
+                <div style={{ color: '#71717a', fontWeight: 'bold' }}>Total Pool</div>
+                <div style={{ fontSize: '1.2rem', fontWeight: '800', color: 'var(--foreground)' }}>{data.outlierCounts.total}</div>
+              </div>
+              <div style={{ flex: 1, background: 'var(--background)', padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--border)' }}>
+                <div style={{ color: '#22c55e', fontWeight: 'bold' }}>Valid (Clean)</div>
+                <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#22c55e' }}>{data.outlierCounts.valid}</div>
+              </div>
+              <div style={{ flex: 1, background: 'var(--background)', padding: '0.5rem', borderRadius: '6px', border: '1px solid var(--border)' }}>
+                <div style={{ color: '#ef4444', fontWeight: 'bold' }}>Outliers</div>
+                <div style={{ fontSize: '1.2rem', fontWeight: '800', color: '#ef4444' }}>{data.outlierCounts.outliers}</div>
+              </div>
+              <div style={{ flex: 1.2, background: 'rgba(59, 130, 246, 0.08)', padding: '0.5rem', borderRadius: '6px', border: '1px solid rgba(59, 130, 246, 0.3)' }}>
+                <div style={{ color: 'var(--primary)', fontWeight: 'bold' }}>Active Cohort</div>
+                <div style={{ fontSize: '1.2rem', fontWeight: '800', color: 'var(--primary)' }}>{data.activeCohortSize}</div>
+              </div>
+            </div>
+
+            {/* Outlier breakdown list */}
+            <div style={{ fontSize: '0.8rem', color: '#71717a', borderTop: '1px solid var(--border)', paddingTop: '0.75rem' }}>
+              <div style={{ fontWeight: '600', marginBottom: '0.25rem', color: 'var(--foreground)' }}>Detected Outliers:</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.25rem 0.5rem' }}>
+                <div>❌ Incomplete: <strong>{data.outlierCounts.byReason.incomplete}</strong></div>
+                <div>👶 Implausible Age: <strong>{data.outlierCounts.byReason.age}</strong></div>
+                <div>📏 Straight-lining: <strong>{data.outlierCounts.byReason.straightlining}</strong></div>
+                <div>⚡ Speed-running: <strong>{data.outlierCounts.byReason.speed}</strong></div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Summary Insights */}

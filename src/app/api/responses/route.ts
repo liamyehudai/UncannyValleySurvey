@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { getResponses } from '@/lib/responses';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const responses = await getResponses();
@@ -12,3 +14,4 @@ export async function GET() {
     );
   }
 }
+
