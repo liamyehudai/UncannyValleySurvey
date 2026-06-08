@@ -298,12 +298,61 @@ export default function Analytics() {
     loadData();
   }, []);
 
+  const handleDownload = async () => {
+    try {
+      const res = await fetch('/api/responses');
+      if (!res.ok) throw new Error('Failed to fetch responses');
+      const jsonData = await res.json();
+      
+      const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'survey_responses.json';
+      document.body.appendChild(a);
+      a.click();
+      
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading JSON:', error);
+      alert('Failed to download JSON data.');
+    }
+  };
+
   if (loading) return <div style={{ textAlign: 'center', marginTop: '4rem' }}>Loading Analytics...</div>;
   if (!data) return <div>Error loading analytics data. Please try again later.</div>;
 
   return (
     <div className="card" style={{ textAlign: 'left', maxWidth: '1100px', margin: '0 auto' }}>
-      <h2 style={{ textAlign: 'center', marginBottom: '2rem' }}>Analytics Dashboard</h2>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', flexWrap: 'wrap', gap: '1rem' }}>
+        <h2 style={{ margin: 0 }}>Analytics Dashboard</h2>
+        <button 
+          onClick={handleDownload}
+          style={{ 
+            background: 'var(--primary)',
+            color: 'white',
+            padding: '0.6rem 1.2rem',
+            borderRadius: '8px',
+            fontWeight: '600',
+            fontSize: '0.9rem',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.5rem',
+            border: 'none',
+            cursor: 'pointer',
+            transition: 'all 0.2s'
+          }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          Download JSON Data
+        </button>
+      </div>
 
       {/* Summary Insights */}
       <div style={{ display: 'flex', gap: '1.5rem', flexWrap: 'wrap', marginBottom: '2.5rem' }}>
