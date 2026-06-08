@@ -81,6 +81,7 @@ function detectOutliers(session: any) {
 export default function Analytics() {
   const [rawResponses, setRawResponses] = useState<any[]>([]);
   const [excludeOutliers, setExcludeOutliers] = useState(true);
+  const [ignoreFewerThanThreeVotes, setIgnoreFewerThanThreeVotes] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Age Filter States
@@ -358,7 +359,7 @@ export default function Analytics() {
       }
       // Sort descending by mean score
       robotList.sort((a, b) => b.mean - a.mean);
-      topRobotsByTask[task] = robotList.slice(0, 5);
+      topRobotsByTask[task] = robotList;
     }
 
     // We also pass qStats for the task answers distribution
@@ -779,17 +780,32 @@ export default function Analytics() {
         })}
       </div>
 
-      {/* Section 2: Top 5 Robots per Task (Survey 2) */}
+      {/* Section 2: Robot Rankings by Task (Survey 2) */}
       <h3 style={{ borderTop: '1px solid var(--border)', paddingTop: '2rem', marginTop: '2rem' }}>
-        Top 5 Fit Robots by Task
+        Robot Rankings by Task
       </h3>
       <p style={{ fontSize: '0.9rem', color: '#71717a', marginBottom: '1.5rem' }}>
-        The top 5 robots ranked best for each individual task (1st place on the left, 5th place on the right). Hover over any robot to view detailed statistics (mean, median, mode, and individual score variance).
+        All robots ranked in order of preference for each task (highest score on the left, lowest on the right). Scroll horizontally to view all rankings. Hover over any robot to view detailed statistics (mean, median, mode, and individual score variance).
       </p>
+
+      <div style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: '600', cursor: 'pointer', fontSize: '0.9rem', color: 'var(--foreground)' }}>
+          <input 
+            type="checkbox" 
+            checked={ignoreFewerThanThreeVotes} 
+            onChange={(e) => setIgnoreFewerThanThreeVotes(e.target.checked)} 
+            style={{ width: '1.1rem', height: '1.1rem', cursor: 'pointer' }}
+          />
+          Ignore robots with fewer than 3 votes/rankings in this task
+        </label>
+      </div>
 
       <div className="task-rankings-container">
         {QUESTIONS.map((task) => {
-          const topRobots = data?.topRobotsByTask?.[task] || [];
+          let topRobots = data?.topRobotsByTask?.[task] || [];
+          if (ignoreFewerThanThreeVotes) {
+            topRobots = topRobots.filter((robot: any) => robot.count >= 3);
+          }
           return (
             <div key={task} className="task-card">
               <div className="task-title">"{task}"</div>
@@ -842,6 +858,10 @@ export default function Analytics() {
                             <span className="tooltip-stat-val" style={{ color: '#f59e0b' }}>
                               {robot.variance.toFixed(3)}
                             </span>
+                          </div>
+                          <div className="tooltip-stat-row">
+                            <span>Rankings Cast:</span>
+                            <span className="tooltip-stat-val">{robot.count}</span>
                           </div>
                           <div className="tooltip-stat-row" style={{ color: poolColor, fontWeight: 'bold' }}>
                             <span>Realism Rating:</span>

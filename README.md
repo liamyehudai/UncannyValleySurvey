@@ -49,6 +49,7 @@ The dashboard provides a premium, interactive overview of the collected research
 ### Demographics Filtering & Exporting
 * **Age Range Slider**: A custom double-thumb range slider to isolate and analyze survey response datasets by specific participant ages (e.g. 18 to 80).
 * **Age Group Presets**: Quick-select presets for common demographic age cohorts (17 to 24, 25 to 34, 35 to 44, 45 to 54, 55 to 64, 65 or older).
+* **Ignore Low-Vote Rankings**: A checkbox option in the task rankings section to hide robots that have fewer than 3 responses, focusing analysis on designs with statistically significant voter representation.
 * **Export Data**: A "Download JSON Data" button to export all survey responses for offline analysis.
 
 ### 1. Key Insights
@@ -67,8 +68,8 @@ The dashboard provides a premium, interactive overview of the collected research
   * **Variance** of its ratings.
   * A custom **distribution bar chart** showing the vote frequencies for ratings 1–7.
 
-### 3. Top 5 Fit Robots by Task (Survey 2)
-* For each of the three tasks, the **top 5 performing robots** are displayed left-to-right (1st to 5th place) based on their average ranking score.
+### 3. Robot Rankings by Task (Survey 2)
+* For each of the three tasks, **all robots** are ranked in order of preference and displayed in a horizontally scrollable list (1st place on the far left, lowest on the right).
 * **Pool-Based Accents**: Each robot card is accented with a top border in the color of its realism pool (matching the colors of the Realism Spectrum & Image Pools) for easy identification.
 * **Statistical Hover Card**: Hovering over a ranked robot displays:
   * **Average Realism Rating**: The robot's overall realism rating from Survey 1.
@@ -76,6 +77,7 @@ The dashboard provides a premium, interactive overview of the collected research
   * **Median**: Median preference score.
   * **Mode**: Most frequent preference score.
   * **Score Variance**: Calculated using population variance ($\sigma^2 = \frac{\sum (x - \mu)^2}{N}$) to measure the degree of participant agreement/disagreement.
+  * **Rankings Cast**: The total number of rankings/votes cast specifically for this robot in this task.
 
 ---
 
