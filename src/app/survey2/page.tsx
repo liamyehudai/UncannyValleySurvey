@@ -1,13 +1,72 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 
 const QUESTIONS = [
   "Which robot would you prefer to serve you food?",
   "Which robot would you prefer to take care of a sick loved one?",
   "Which robot would you prefer clean your home?"
 ];
+
+function renderQuestionText(qText: string) {
+  const keyword = "prefer";
+  const index = qText.indexOf(keyword);
+  if (index === -1) return qText;
+  
+  const before = qText.substring(0, index + keyword.length);
+  const after = qText.substring(index + keyword.length);
+  
+  return (
+    <>
+      {before}
+      <span style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--primary)' }}>
+        {after}
+      </span>
+    </>
+  );
+}
+
+function Confetti() {
+  const [pieces, setPieces] = useState<{ id: number; style: React.CSSProperties }[]>([]);
+
+  useEffect(() => {
+    const colors = ['#f43f5e', '#3b82f6', '#10b981', '#eab308', '#a855f7', '#ff7849', '#ffc82c'];
+    const newPieces = Array.from({ length: 150 }).map((_, i) => {
+      const sizeWidth = Math.floor(Math.random() * 8) + 6; // 6px - 14px
+      const sizeHeight = Math.floor(Math.random() * 12) + 10; // 10px - 22px
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      const left = Math.random() * 100; // 0% - 100%
+      const duration = Math.random() * 3 + 2.5; // 2.5s - 5.5s
+      const delay = Math.random() * 4; // 0s - 4s
+      const shape = Math.random();
+      const borderRadius = shape > 0.6 ? '50%' : shape > 0.3 ? '3px' : '0px';
+      
+      const style: React.CSSProperties = {
+        width: `${sizeWidth}px`,
+        height: `${sizeHeight}px`,
+        backgroundColor: color,
+        left: `${left}%`,
+        borderRadius,
+        animationDuration: `${duration}s`,
+        animationDelay: `${delay}s`,
+        transform: `rotate(${Math.random() * 360}deg)`,
+      };
+
+      return { id: i, style };
+    });
+    setPieces(newPieces);
+  }, []);
+
+  return (
+    <div className="confetti-container">
+      {pieces.map(p => (
+        <div key={p.id} className="confetti-piece" style={p.style} />
+      ))}
+    </div>
+  );
+}
 
 export default function Survey2() {
   const [unranked, setUnranked] = useState<string[]>([]);
@@ -206,21 +265,24 @@ export default function Survey2() {
 
   if (submitted) {
     return (
-      <div className="card" style={{ maxWidth: '600px', margin: '2rem auto' }}>
-        <h2 style={{ color: '#22c55e' }}>🎉 Congratulations!</h2>
-        <p style={{ fontSize: '1.05rem', margin: '1rem 0' }}>
-          You have successfully completed all 3 ranking tasks in Survey 2!
-        </p>
-        <p style={{ color: '#71717a', fontSize: '0.9rem' }}>
-          Your responses have been saved to help us analyze the relationship between robot realism and preference.
-        </p>
-        <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginTop: '2.5rem' }}>
-          <button onClick={loadInitialData}>Take Survey Again</button>
-          <Link href="/analytics">
-            <button style={{ background: '#71717a' }}>View Analytics Dashboard</button>
-          </Link>
+      <>
+        <Confetti />
+        <div className="card" style={{ maxWidth: '600px', margin: '2rem auto' }}>
+          <h2 style={{ color: '#22c55e' }}>🎉 Congratulations!</h2>
+          <p style={{ fontSize: '1.05rem', margin: '1rem 0' }}>
+            You have successfully completed all 3 ranking questions in Survey 2!
+          </p>
+          <p style={{ color: '#71717a', fontSize: '0.9rem' }}>
+            Your responses have been saved to help us analyze the relationship between robot realism and preference.
+          </p>
+          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginTop: '2.5rem' }}>
+            <button onClick={loadInitialData}>Take Survey Again</button>
+            <Link href="/analytics">
+              <button style={{ background: '#71717a' }}>View Analytics Dashboard</button>
+            </Link>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
@@ -230,12 +292,14 @@ export default function Survey2() {
   return (
     <div className="card survey2-container">
       <div style={{ float: 'right', fontSize: '0.85rem', color: '#71717a', fontWeight: 'bold' }}>
-        Task {currentQuestionIndex + 1} of 3
+        Question {currentQuestionIndex + 1} of 3
       </div>
       <div style={{ clear: 'both' }} />
 
-      <h2>Rank the robots for this task:</h2>
-      <h3 style={{ color: 'var(--primary)', margin: '1rem 0' }}>"{currentQuestion}"</h3>
+      <h2>Rank the robots for Question {currentQuestionIndex + 1}:</h2>
+      <h3 style={{ color: 'var(--foreground)', margin: '1rem 0', fontWeight: '500' }}>
+        "{renderQuestionText(currentQuestion)}"
+      </h3>
       
       <p style={{ color: '#71717a', fontSize: '0.9rem', marginBottom: '2rem' }}>
         Drag and drop the robots from the pool into the spectrum slots, or click them to auto-fill left to right. Drag items between slots to swap them.
@@ -274,11 +338,13 @@ export default function Survey2() {
                     >
                       ✕
                     </button>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
+                    <Image
                       src={`/images/${img}`}
                       alt="Ranked robot"
                       className="slot-filled-img"
+                      width={150}
+                      height={150}
+                      style={{ objectFit: 'cover' }}
                     />
                   </div>
                 ) : (
@@ -311,11 +377,13 @@ export default function Survey2() {
               onClick={() => handleUnrankedClick(img, idx)}
               title="Click to place or drag me"
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+              <Image
                 src={`/images/${img}`}
                 alt="Unranked robot"
                 className="unranked-img"
+                width={1000}
+                height={1000}
+                style={{ objectFit: 'cover' }}
               />
             </div>
           ))
@@ -334,7 +402,7 @@ export default function Survey2() {
             background: isComplete ? '#22c55e' : '#a1a1aa'
           }}
         >
-          {currentQuestionIndex + 1 === 3 ? "Submit & Complete Survey" : "Submit & Next Task"}
+          {currentQuestionIndex + 1 === 3 ? "Submit & Complete Survey" : "Submit & Next Question"}
         </button>
       </div>
     </div>

@@ -865,6 +865,40 @@ h1, h2, h3 {
   background-color: var(--primary);
 }
 
+/* Confetti animation styles */
+.confetti-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 9999;
+  overflow: hidden;
+  perspective: 1000px;
+}
+
+.confetti-piece {
+  position: absolute;
+  top: -20px;
+  opacity: 0.85;
+  animation: confetti-fall linear forwards;
+}
+
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(0) rotateX(0deg) rotateY(0deg) rotateZ(0deg);
+  }
+  50% {
+    transform: translateY(55vh) rotateX(360deg) rotateY(180deg) rotateZ(180deg);
+  }
+  100% {
+    transform: translateY(115vh) rotateX(720deg) rotateY(360deg) rotateZ(360deg);
+    opacity: 0;
+  }
+}
+
+
 
 
 

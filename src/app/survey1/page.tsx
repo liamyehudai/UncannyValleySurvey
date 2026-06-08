@@ -2,10 +2,33 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
+
+// Helper function to shuffle and partially prioritize images with fewer votes
+function getPrioritizedImages(imagesList: string[], voteCounts: Record<string, number> = {}) {
+  const counts = Object.values(voteCounts);
+  const totalVotes = counts.reduce((sum, v) => sum + v, 0);
+  const avgVotes = counts.length > 0 ? totalVotes / counts.length : 0;
+  
+  // Adaptive noise factor scale based on vote distribution to balance randomness and prioritization
+  const noiseFactor = Math.max(3.0, avgVotes * 1.5);
+  
+  return [...imagesList].sort((a, b) => {
+    const votesA = voteCounts[a] || 0;
+    const votesB = voteCounts[b] || 0;
+    
+    // Score combines actual votes with random noise
+    const scoreA = votesA + Math.random() * noiseFactor;
+    const scoreB = votesB + Math.random() * noiseFactor;
+    
+    return scoreA - scoreB;
+  });
+}
 
 export default function Survey1() {
   const router = useRouter();
   const [images, setImages] = useState<string[]>([]);
+  const [voteCounts, setVoteCounts] = useState<Record<string, number>>({});
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answeredCount, setAnsweredCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -33,9 +56,12 @@ export default function Survey1() {
           setLoading(false);
           return;
         }
-        // Shuffle images for randomness
-        const shuffled = [...data.images].sort(() => Math.random() - 0.5);
-        setImages(shuffled);
+        const counts = data.voteCounts || {};
+        setVoteCounts(counts);
+        
+        // Prioritize images with fewer votes to balance representation
+        const prioritized = getPrioritizedImages(data.images, counts);
+        setImages(prioritized);
         setLoading(false);
       })
       .catch(err => {
@@ -83,7 +109,8 @@ export default function Survey1() {
     } else {
       // Move to next image
       if (currentIndex + 1 >= images.length) {
-        setImages(prev => [...prev].sort(() => Math.random() - 0.5));
+        const prioritized = getPrioritizedImages(images, voteCounts);
+        setImages(prioritized);
         setCurrentIndex(0);
       } else {
         setCurrentIndex(currentIndex + 1);
@@ -128,7 +155,7 @@ export default function Survey1() {
   return (
     <div className="card">
       <div style={{ float: 'right', fontSize: '0.85rem', color: '#71717a', fontWeight: 'bold' }}>
-        Question {answeredCount + 1} of 5
+        Image {currentIndex + 1} of {images.length}
       </div>
       <div style={{ clear: 'both' }} />
       
@@ -136,11 +163,17 @@ export default function Survey1() {
       <p className="survey-legend">1 = Not human at all | 4 = Cartoonish/Animatronic | 7 = Barely tell it's a robot</p>
       
       <div className="image-display">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={`/images/${images[currentIndex]}`} alt="Robot" />
+        <Image
+          src={`/images/${images[currentIndex]}`}
+          alt="Robot"
+          width={1000}
+          height={1000}
+          style={{ width: '100%', height: 'auto', maxHeight: '50vh', objectFit: 'contain', borderRadius: '8px' }}
+          priority
+        />
       </div>
 
-      <p style={{ color: '#71717a', fontSize: '0.9rem' }}>Image {currentIndex + 1} of {images.length}</p>
+      <p style={{ color: '#71717a', fontSize: '0.9rem' }}>Question {answeredCount + 1} of 5</p>
 
       <div className="rating-buttons">
         {[1, 2, 3, 4, 5, 6, 7].map((num) => (

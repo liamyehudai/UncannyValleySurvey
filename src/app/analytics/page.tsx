@@ -2,12 +2,23 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 
 const QUESTIONS = [
   "Which robot would you prefer to serve you food?",
   "Which robot would you prefer to take care of a sick loved one?",
   "Which robot would you prefer clean your home?"
 ];
+
+const POOL_COLORS: Record<number, string> = {
+  1: '#ef4444',
+  2: '#f97316',
+  3: '#f59e0b',
+  4: '#eab308',
+  5: '#84cc16',
+  6: '#22c55e',
+  7: '#10b981'
+};
 
 // Helper function to detect low-quality outlier responses
 function detectOutliers(session: any) {
@@ -324,6 +335,7 @@ export default function Analytics() {
     // Determine top 5 robots for each task
     const topRobotsByTask: Record<string, Array<{
       image: string;
+      realismAvg: number;
       mean: number;
       median: number;
       mode: number;
@@ -337,8 +349,10 @@ export default function Analytics() {
       for (const img in robots) {
         const scores = robots[img];
         const stats = calculateDetailedStats(scores);
+        const realismAvg = stats1[img] ? stats1[img].average : 0;
         robotList.push({
           image: img,
+          realismAvg,
           ...stats
         });
       }
@@ -651,11 +665,12 @@ export default function Analytics() {
         <div style={{ flex: 1, minWidth: '280px', background: 'var(--background)', padding: '1.5rem', borderRadius: '12px', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '1rem' }}>
           {data.bestRobot ? (
             <>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img 
+              <Image 
                 src={`/images/${data.bestRobot}`} 
                 alt="Winner robot" 
-                style={{ width: '80px', height: '80px', borderRadius: '8px', objectFit: 'cover', border: '2px solid var(--primary)' }}
+                width={80}
+                height={80}
+                style={{ borderRadius: '8px', objectFit: 'cover', border: '2px solid var(--primary)' }}
               />
               <div>
                 <span style={{ fontSize: '0.85rem', color: '#71717a', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Best Rated Robot Overall</span>
@@ -694,20 +709,22 @@ export default function Analytics() {
                 ) : (
                   poolItems.map((item: any, idx: number) => (
                     <div key={idx} className="thumbnail-wrapper">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
+                      <Image
                         src={`/images/${item.image}`}
                         alt={item.image}
                         className="robot-thumbnail"
+                        width={42}
+                        height={42}
                       />
                       
                       <div className="robot-tooltip">
                         <div className="tooltip-title">{item.image}</div>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
+                        <Image
                           src={`/images/${item.image}`}
                           alt={item.image}
-                          style={{ width: '100%', aspectRatio: '1', objectFit: 'contain', borderRadius: '8px', marginBottom: '0.75rem', backgroundColor: 'var(--background)' }}
+                          width={200}
+                          height={200}
+                          style={{ width: '100%', height: 'auto', aspectRatio: '1', objectFit: 'contain', borderRadius: '8px', marginBottom: '0.75rem', backgroundColor: 'var(--background)' }}
                         />
                         <div className="tooltip-stat-row">
                           <span>Average (Mean):</span>
@@ -783,47 +800,61 @@ export default function Analytics() {
                     No ranking responses submitted for this task yet.
                   </div>
                 ) : (
-                  topRobots.map((robot: any, idx: number) => (
-                    <div key={robot.image} className="rank-item">
-                      <div className="rank-badge">{idx + 1}</div>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img 
-                        src={`/images/${robot.image}`} 
-                        alt={`Robot Rank ${idx + 1}`} 
-                        className="rank-thumbnail"
-                      />
-                      <div className="rank-score">Score: {robot.mean.toFixed(2)}</div>
-                      
-                      {/* Hover stats panel */}
-                      <div className="rank-tooltip">
-                        <div style={{ fontWeight: 'bold', fontSize: '0.8rem', color: '#a1a1aa', marginBottom: '0.5rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {robot.image}
-                        </div>
-                        <div className="tooltip-stat-row">
-                          <span>Mean:</span>
-                          <span className="tooltip-stat-val">{robot.mean.toFixed(2)}</span>
-                        </div>
-                        <div className="tooltip-stat-row">
-                          <span>Median:</span>
-                          <span className="tooltip-stat-val">{Number(robot.median).toFixed(1)}</span>
-                        </div>
-                        <div className="tooltip-stat-row">
-                          <span>Mode:</span>
-                          <span className="tooltip-stat-val">{robot.mode}</span>
-                        </div>
-                        <div className="tooltip-stat-row">
-                          <span>Variance:</span>
-                          <span className="tooltip-stat-val" style={{ color: '#f59e0b' }}>
-                            {robot.variance.toFixed(3)}
-                          </span>
-                        </div>
-                        <div className="tooltip-stat-row" style={{ marginTop: '0.25rem', borderTop: '1px solid #27272a', paddingTop: '0.25rem' }}>
-                          <span>Rankings:</span>
-                          <span style={{ fontWeight: 'bold' }}>{robot.count}</span>
+                  topRobots.map((robot: any, idx: number) => {
+                    const poolNum = Math.max(1, Math.min(7, Math.round(robot.realismAvg)));
+                    const poolColor = robot.realismAvg > 0 ? POOL_COLORS[poolNum] : 'var(--border)';
+                    
+                    return (
+                      <div 
+                        key={robot.image} 
+                        className="rank-item" 
+                        style={{ borderTop: `4px solid ${poolColor}` }}
+                      >
+                        <div className="rank-badge">{idx + 1}</div>
+                        <Image 
+                          src={`/images/${robot.image}`} 
+                          alt={`Robot Rank ${idx + 1}`} 
+                          className="rank-thumbnail"
+                          width={80}
+                          height={80}
+                        />
+                        <div className="rank-score">Score: {robot.mean.toFixed(2)}</div>
+                        
+                        {/* Hover stats panel */}
+                        <div className="rank-tooltip">
+                          <div style={{ fontWeight: 'bold', fontSize: '0.8rem', color: '#a1a1aa', marginBottom: '0.5rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {robot.image}
+                          </div>
+                          <div className="tooltip-stat-row">
+                            <span>Mean:</span>
+                            <span className="tooltip-stat-val">{robot.mean.toFixed(2)}</span>
+                          </div>
+                          <div className="tooltip-stat-row">
+                            <span>Median:</span>
+                            <span className="tooltip-stat-val">{Number(robot.median).toFixed(1)}</span>
+                          </div>
+                          <div className="tooltip-stat-row">
+                            <span>Mode:</span>
+                            <span className="tooltip-stat-val">{robot.mode}</span>
+                          </div>
+                          <div className="tooltip-stat-row">
+                            <span>Variance:</span>
+                            <span className="tooltip-stat-val" style={{ color: '#f59e0b' }}>
+                              {robot.variance.toFixed(3)}
+                            </span>
+                          </div>
+                          <div className="tooltip-stat-row" style={{ color: poolColor, fontWeight: 'bold' }}>
+                            <span>Realism Rating:</span>
+                            <span>{robot.realismAvg > 0 ? robot.realismAvg.toFixed(2) : 'N/A'} (Pool {poolNum})</span>
+                          </div>
+                          <div className="tooltip-stat-row" style={{ marginTop: '0.25rem', borderTop: '1px solid #27272a', paddingTop: '0.25rem' }}>
+                            <span>Rankings:</span>
+                            <span style={{ fontWeight: 'bold' }}>{robot.count}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>

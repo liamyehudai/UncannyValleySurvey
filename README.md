@@ -19,14 +19,14 @@ The application guides participants through a structured two-stage survey flow.
 ### Stage 2: Task Fitness Ranking (Survey 2)
 * **Goal**: Map task preferences to different robot designs.
 * **Flow**:
-  * Participants complete **3 sequential ranking tasks** corresponding to three unique everyday scenarios:
+  * Participants complete **3 sequential ranking questions** corresponding to three unique everyday scenarios:
     1. *"Which robot would you prefer to serve you food?"*
     2. *"Which robot would you prefer to take care of a sick loved one?"*
     3. *"Which robot would you prefer clean your home?"*
-  * For each task, **5 random robots** are selected from the image pool.
+  * For each question, **5 random robots** are selected from the image pool.
   * **Interactive Spectrum UI**: Participants rank the robots from **Best/Most Fit** (highlighted in green on the left) to **Worst/Least Fit** (highlighted in red on the right).
   * **Controls**: Participants can click a robot to auto-fill the next available slot, click **✕** to remove it, or use **drag-and-drop** to place, swap, or reorder items.
-  * **Completion**: Once all 3 tasks are finished, a completion screen congratulates the participant and links them to the Analytics dashboard.
+  * **Completion**: Once all 3 questions are finished, a confetti celebration falls from the top of the screen as the completed survey modal displays, congratulating the participant and linking them to the Analytics dashboard.
 
 ---
 
@@ -46,6 +46,11 @@ The application guides participants through a structured two-stage survey flow.
 
 The dashboard provides a premium, interactive overview of the collected research data:
 
+### Demographics Filtering & Exporting
+* **Age Range Slider**: A custom double-thumb range slider to isolate and analyze survey response datasets by specific participant ages (e.g. 18 to 80).
+* **Age Group Presets**: Quick-select presets for common demographic age cohorts (17 to 24, 25 to 34, 35 to 44, 45 to 54, 55 to 64, 65 or older).
+* **Export Data**: A "Download JSON Data" button to export all survey responses for offline analysis.
+
 ### 1. Key Insights
 * **Most Selected Realism Level**: Identifies which realism pool (1–7) accumulated the most preference points in Survey 2, helping identify if people prefer highly realistic or cartoonish/mechanical robots for tasks.
 * **Best Rated Robot Overall**: Shows the robot with the highest average Survey 2 ranking score across all tasks.
@@ -64,7 +69,9 @@ The dashboard provides a premium, interactive overview of the collected research
 
 ### 3. Top 5 Fit Robots by Task (Survey 2)
 * For each of the three tasks, the **top 5 performing robots** are displayed left-to-right (1st to 5th place) based on their average ranking score.
+* **Pool-Based Accents**: Each robot card is accented with a top border in the color of its realism pool (matching the colors of the Realism Spectrum & Image Pools) for easy identification.
 * **Statistical Hover Card**: Hovering over a ranked robot displays:
+  * **Average Realism Rating**: The robot's overall realism rating from Survey 1.
   * **Mean**: Average preference score (out of 5.0).
   * **Median**: Median preference score.
   * **Mode**: Most frequent preference score.
