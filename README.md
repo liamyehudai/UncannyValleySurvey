@@ -12,8 +12,9 @@ The application guides participants through a structured two-stage survey flow.
 * **Goal**: Assess the perceived physical realism of different robot designs.
 * **Flow**: 
   * Participants are presented with random robot images one at a time.
-  * For each robot, participants rate its realism on a scale of **1 to 7** (where `1 = Not human at all`, `4 = Cartoonish/Animatronic`, and `7 = Barely tell it's a robot`).
-  * Participants complete exactly **5 random questions** in this stage.
+  * For each robot, participants rate its realism on a scale of **1 to 7** with visual markers for reference (where `1 = Industrial robot` accompanied by an industrial robot icon, `4 = Cartoonish/Animatronic` accompanied by a golem robot icon, and `7 = Barely tell it's a robot` accompanied by a human icon).
+  * **Industrial Verification Check**: If a participant selects rating `1` for three or more robots, the survey halts and presents a verification modal displaying an industrial robot image (`IndurstrialRobotExample.jpg`) and warning: *"You are marking a lot of robots as industrial looking, do they look like this? Try again"*. Clicking `"Try Again"` resets their Survey 1 answered count to 0, clears their session's Survey 1 ratings from the JSON data storage, and restarts them from question 1.
+  * Participants complete exactly **5 valid questions** in this stage.
   * Upon submitting the 5th rating, the system automatically redirects them to **Survey 2**.
 
 ### Stage 2: Task Fitness Ranking (Survey 2)
